@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
@@ -45,18 +46,22 @@ namespace GkeCloudflareSync
 
             _logger.LogInformation("GkeCfSyncWorker started at: {time}", DateTimeOffset.Now);
 
-            foreach (var delay in _retryPolicy)
+            foreach (var delay in _retryPolicy.Concat(new[] { TimeSpan.MinValue }))
             {
                 try
                 {
                     var ip = await _kubernetes.GetHostNodeExternalIp();
                     await _cloudflare.UpdateDnsARecord(ip);
                     _hostApplicationLifetime.StopApplication();
+                    return;
                 }
                 catch
                 {
-                    _logger.LogInformation($"Retrying in {delay.TotalSeconds:N0}s...");
-                    await Task.Delay(delay);
+                    if (delay != TimeSpan.MinValue)
+                    {
+                        _logger.LogInformation($"Retrying in {delay.TotalSeconds:N0}s...");
+                        await Task.Delay(delay);
+                    }
                 }
             }
 
